@@ -198,7 +198,7 @@ async function attemptFetch(url, userAgent, timeout) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout || DEFAULT_TIMEOUT_MS);
 
-  console.log(`[Debug] Fetching: ${url}`);
+  // console.log(`[Debug] Fetching: ${url}`);
 
   let response;
   try {
@@ -211,7 +211,7 @@ async function attemptFetch(url, userAgent, timeout) {
     });
     
     const finalUrl = headResponse.url;
-    console.log(`[Debug] HEAD redirect to: ${finalUrl.substring(0, 80)}...`);
+    // console.log(`[Debug] HEAD redirect to: ${finalUrl.substring(0, 80)}...`);
     
     // 如果被重定向到登入頁面，拋出錯誤
     if (finalUrl.includes('/login/') || finalUrl.includes('login.php')) {
@@ -234,7 +234,7 @@ async function attemptFetch(url, userAgent, timeout) {
     clearTimeout(timeoutId);
   }
 
-  console.log(`[Debug] Response status: ${response.status}, Final URL: ${response.url.substring(0, 60)}...`);
+  // console.log(`[Debug] Response status: ${response.status}, Final URL: ${response.url.substring(0, 60)}...`);
 
   if (!response.ok) {
     throw new Error(`Failed to fetch Facebook URL ${url} (status ${response.status})`);
@@ -247,7 +247,7 @@ async function attemptFetch(url, userAgent, timeout) {
     // 嘗試從 HTML 中提取重定向 URL
     const redirectMatch = html.match(/window\.location\.replace\(["']([^"']+)["']\)/);
     if (redirectMatch) {
-      console.log(`[Debug] JS redirect detected, following to: ${redirectMatch[1].substring(0, 60)}...`);
+      // console.log(`[Debug] JS redirect detected, following to: ${redirectMatch[1].substring(0, 60)}...`);
       const redirectResponse = await fetch(redirectMatch[1], { headers, redirect: 'follow' });
       if (redirectResponse.ok) {
         const redirectHtml = await redirectResponse.text();
