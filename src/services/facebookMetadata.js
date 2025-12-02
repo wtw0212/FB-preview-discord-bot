@@ -202,7 +202,25 @@ async function attemptFetch(url, userAgent, timeout) {
 
   let response;
   try {
-    response = await fetch(url, {
+    // 先嘗試用 HEAD 請求獲取重定向後的 URL
+    const headResponse = await fetch(url, {
+      method: 'HEAD',
+      headers,
+      redirect: 'follow',
+      signal: controller.signal,
+    });
+    
+    const finalUrl = headResponse.url;
+    console.log(`[Debug] HEAD redirect to: ${finalUrl.substring(0, 80)}...`);
+    
+    // 如果被重定向到登入頁面，拋出錯誤
+    if (finalUrl.includes('/login/') || finalUrl.includes('login.php')) {
+      throw new Error(`Redirected to login page for ${url} (status 403)`);
+    }
+    
+    // 用最終 URL 抓取內容
+    const targetUrl = finalUrl !== url ? finalUrl : url;
+    response = await fetch(targetUrl, {
       headers,
       redirect: 'follow',
       signal: controller.signal,
@@ -218,16 +236,26 @@ async function attemptFetch(url, userAgent, timeout) {
 
   console.log(`[Debug] Response status: ${response.status}, Final URL: ${response.url.substring(0, 60)}...`);
 
-  // 如果被重定向到登入頁面，拋出錯誤讓它嘗試下一個 User-Agent
-  if (response.url.includes('/login/') || response.url.includes('login.php')) {
-    throw new Error(`Redirected to login page for ${url} (status 403)`);
-  }
-
   if (!response.ok) {
     throw new Error(`Failed to fetch Facebook URL ${url} (status ${response.status})`);
   }
 
   const html = await response.text();
+  
+  // 檢查是否是 JavaScript 重定向頁面
+  if (html.includes('Redirecting...') || (html.length < 5000 && html.includes('window.location'))) {
+    // 嘗試從 HTML 中提取重定向 URL
+    const redirectMatch = html.match(/window\.location\.replace\(["']([^"']+)["']\)/);
+    if (redirectMatch) {
+      console.log(`[Debug] JS redirect detected, following to: ${redirectMatch[1].substring(0, 60)}...`);
+      const redirectResponse = await fetch(redirectMatch[1], { headers, redirect: 'follow' });
+      if (redirectResponse.ok) {
+        const redirectHtml = await redirectResponse.text();
+        return { url, ...parseOpenGraph(redirectHtml, redirectMatch[1]) };
+      }
+    }
+    throw new Error(`Got redirect page for ${url} (status 403)`);
+  }
   
   // 雙重檢查是否是登入頁面
   if (html.includes('Log into Facebook') && !html.includes('og:description')) {
