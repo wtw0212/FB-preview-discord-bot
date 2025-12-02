@@ -84,7 +84,7 @@ async function handleMessage(message) {
       // 如果是影片且有影片 URL，單獨發送影片連結
       if (metadata.isVideo && metadata.video) {
         await channel.send({
-          content: metadata.video,
+          content: `[Video](${metadata.video})`,
           allowedMentions: { repliedUser: false },
         });
       }
