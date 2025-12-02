@@ -38,7 +38,16 @@ const IMAGE_SELECTORS = [
   { selector: 'meta[property="og:image"]' },
   { selector: 'meta[name="og:image"]' },
   { selector: 'meta[property="twitter:image"]' },
+  { selector: 'meta[property="twitter:image:src"]' },
   { selector: 'link[rel="image_src"]', attr: 'href' },
+];
+
+// 影片相關選擇器
+const VIDEO_SELECTORS = [
+  { selector: 'meta[property="og:video:secure_url"]' },
+  { selector: 'meta[property="og:video:url"]' },
+  { selector: 'meta[property="og:video"]' },
+  { selector: 'meta[name="twitter:player:stream"]' },
 ];
 
 function extractFacebookLinks(text) {
@@ -59,6 +68,28 @@ async function fetchFacebookMetadata(url, options = {}) {
   // 嘗試將 /share/p/ 短連結轉換為標準格式
   const normalizedUrl = convertShareUrl(url);
   
+  // 首先嘗試使用 Facebook oEmbed API（不需要 token 的公開端點）
+  try {
+    const oembedResult = await fetchOEmbed(normalizedUrl);
+    if (oembedResult && (oembedResult.thumbnail_url || oembedResult.html)) {
+      return {
+        url: normalizedUrl,
+        title: oembedResult.author_name || oembedResult.provider_name || 'Facebook',
+        description: null,
+        siteName: oembedResult.provider_name || 'Facebook',
+        type: oembedResult.type || null,
+        image: oembedResult.thumbnail_url || null,
+        video: null,
+        videoWidth: oembedResult.width || null,
+        videoHeight: oembedResult.height || null,
+        videoType: null,
+        isVideo: oembedResult.type === 'video',
+      };
+    }
+  } catch (oembedError) {
+    console.warn('[FacebookMetadata] oEmbed failed:', oembedError.message);
+  }
+
   // 嘗試多個 User-Agent
   const userAgents = options.userAgent ? [options.userAgent] : USER_AGENTS;
   let lastError;
@@ -90,6 +121,34 @@ async function fetchFacebookMetadata(url, options = {}) {
   }
 
   throw lastError;
+}
+
+// 嘗試使用 Facebook oEmbed API
+async function fetchOEmbed(url) {
+  const oembedUrl = `https://www.facebook.com/plugins/post/oembed.json/?url=${encodeURIComponent(url)}`;
+  
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
+  
+  try {
+    const response = await fetch(oembedUrl, {
+      headers: {
+        'User-Agent': FALLBACK_USER_AGENT,
+        'Accept': 'application/json',
+      },
+      signal: controller.signal,
+    });
+    
+    if (!response.ok) {
+      return null;
+    }
+    
+    return await response.json();
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 // 將 /share/p/ 或 /share/v/ 連結轉換為標準 post 連結
@@ -163,7 +222,46 @@ function parseOpenGraph(html, pageUrl) {
   const siteName =
     cleanText(firstMeta($, SITE_NAME_SELECTORS.map((selector) => ({ selector }))) || 'Facebook') || 'Facebook';
   const type = cleanText(firstMeta($, [{ selector: 'meta[property="og:type"]' }]) || '');
-  const image = resolveToAbsolute(firstMeta($, IMAGE_SELECTORS), pageUrl);
+  
+  // 取得圖片 - 嘗試多種方式
+  let image = resolveToAbsolute(firstMeta($, IMAGE_SELECTORS), pageUrl);
+  
+  // 如果圖片 URL 包含 Facebook CDN 的限制參數，嘗試從其他地方取得
+  if (!image || isFacebookRestrictedImage(image)) {
+    // 嘗試從頁面內容中提取圖片
+    const altImage = extractImageFromContent($, pageUrl);
+    if (altImage) {
+      image = altImage;
+    }
+  }
+
+  // 取得影片資訊
+  let video = resolveToAbsolute(firstMeta($, VIDEO_SELECTORS), pageUrl);
+  const videoWidth = parseInt(firstMeta($, [{ selector: 'meta[property="og:video:width"]' }]) || '0', 10);
+  const videoHeight = parseInt(firstMeta($, [{ selector: 'meta[property="og:video:height"]' }]) || '0', 10);
+  const videoType = firstMeta($, [{ selector: 'meta[property="og:video:type"]' }]);
+
+  // 判斷是否為影片貼文 - 需要更嚴格的判斷
+  // og:type 為 video.other 不一定是真的影片，需要有實際的影片 URL 或特定的影片路徑
+  const hasVideoUrl = !!video;
+  const isVideoPath = pageUrl.includes('/videos/') || 
+    pageUrl.includes('/watch/') || 
+    pageUrl.includes('/reel/') || 
+    pageUrl.includes('fb.watch') ||
+    pageUrl.includes('/share/v/') ||  // /share/v/ 是影片分享連結
+    pageUrl.includes('/share/r/');    // /share/r/ 是 Reels 分享連結
+  
+  const isVideo = hasVideoUrl || isVideoPath;
+
+  // 如果是影片但沒有取得影片 URL，嘗試從頁面內容提取
+  if (isVideo && !video) {
+    video = extractVideoFromContent($);
+  }
+
+  // 如果還是沒有圖片，嘗試從影片縮圖提取
+  if (!image && isVideo) {
+    image = extractImageFromContent($, pageUrl);
+  }
 
   return {
     title: title || 'Facebook link',
@@ -171,7 +269,132 @@ function parseOpenGraph(html, pageUrl) {
     siteName,
     type: type || null,
     image: image || null,
+    video: video || null,
+    videoWidth: videoWidth || null,
+    videoHeight: videoHeight || null,
+    videoType: videoType || null,
+    isVideo,
   };
+}
+
+// 檢查是否為 Facebook 限制的圖片（通常是預設圖片或空白圖片）
+function isFacebookRestrictedImage(imageUrl) {
+  if (!imageUrl) return true;
+  
+  // 常見的 Facebook 預設/限制圖片特徵
+  const restrictedPatterns = [
+    'safe_image.php',
+    'platform-lookaside.fbsbx.com',
+    '/images/icons/',
+    'rsrc.php',
+    'static.xx.fbcdn.net/rsrc',
+  ];
+  
+  return restrictedPatterns.some(pattern => imageUrl.includes(pattern));
+}
+
+// 嘗試從頁面內容中提取圖片
+function extractImageFromContent($, pageUrl) {
+  // 嘗試從 JSON-LD 中提取
+  const jsonLdScripts = $('script[type="application/ld+json"]');
+  for (let i = 0; i < jsonLdScripts.length; i++) {
+    try {
+      const jsonText = $(jsonLdScripts[i]).html();
+      if (jsonText) {
+        const json = JSON.parse(jsonText);
+        if (json.image) {
+          const img = Array.isArray(json.image) ? json.image[0] : json.image;
+          if (typeof img === 'string') {
+            return resolveToAbsolute(img, pageUrl);
+          } else if (img && img.url) {
+            return resolveToAbsolute(img.url, pageUrl);
+          }
+        }
+        if (json.thumbnailUrl) {
+          return resolveToAbsolute(json.thumbnailUrl, pageUrl);
+        }
+      }
+    } catch {
+      // 忽略 JSON 解析錯誤
+    }
+  }
+
+  // 嘗試從頁面中的高解析度圖片提取
+  const imgElements = $('img[data-src], img[src*="scontent"]');
+  for (let i = 0; i < imgElements.length; i++) {
+    const src = $(imgElements[i]).attr('data-src') || $(imgElements[i]).attr('src');
+    if (src && src.includes('scontent') && !isFacebookRestrictedImage(src)) {
+      return resolveToAbsolute(src, pageUrl);
+    }
+  }
+
+  // 嘗試從內嵌的 JavaScript 資料中提取圖片
+  const scripts = $('script').toArray();
+  for (const script of scripts) {
+    const content = $(script).html() || '';
+    
+    // 尋找 scontent CDN 圖片 URL
+    const imageMatches = content.match(/https?:\\\/\\\/scontent[^"'\\]+\.(?:jpg|jpeg|png|webp)/gi);
+    if (imageMatches && imageMatches.length > 0) {
+      try {
+        // 解碼 escaped URL
+        const decodedUrl = imageMatches[0].replace(/\\\//g, '/');
+        if (!isFacebookRestrictedImage(decodedUrl)) {
+          return decodedUrl;
+        }
+      } catch {
+        // 忽略解碼錯誤
+      }
+    }
+  }
+
+  return null;
+}
+
+// 嘗試從頁面內容中提取影片
+function extractVideoFromContent($) {
+  const scripts = $('script').toArray();
+  
+  for (const script of scripts) {
+    const content = $(script).html() || '';
+    
+    // 尋找影片 URL 模式
+    const videoPatterns = [
+      // Facebook video CDN
+      /https?:\\\/\\\/video[^"'\\]+\.mp4[^"'\\]*/gi,
+      // scontent video
+      /https?:\\\/\\\/scontent[^"'\\]+\.mp4[^"'\\]*/gi,
+      // fbcdn video
+      /https?:\\\/\\\/[^"'\\]*fbcdn[^"'\\]+\.mp4[^"'\\]*/gi,
+    ];
+    
+    for (const pattern of videoPatterns) {
+      const matches = content.match(pattern);
+      if (matches && matches.length > 0) {
+        try {
+          // 解碼 escaped URL
+          let decodedUrl = matches[0].replace(/\\\//g, '/');
+          // 清理 URL 結尾
+          decodedUrl = decodedUrl.split('"')[0].split("'")[0];
+          return decodedUrl;
+        } catch {
+          // 忽略解碼錯誤
+        }
+      }
+    }
+
+    // 嘗試找 playable_url 或 video_url
+    const urlMatch = content.match(/"(?:playable_url|video_url|browser_native_hd_url|browser_native_sd_url)":"([^"]+)"/);
+    if (urlMatch && urlMatch[1]) {
+      try {
+        return urlMatch[1].replace(/\\\//g, '/').replace(/\\u0025/g, '%');
+      } catch {
+        // 忽略錯誤
+      }
+    }
+  }
+
+  return null;
 }
 
 function firstMeta($, selectors) {
