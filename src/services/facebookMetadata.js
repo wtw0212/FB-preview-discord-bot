@@ -242,6 +242,11 @@ async function attemptFetch(url, userAgent, timeout) {
 
   const html = await response.text();
   
+  // 檢查是否是錯誤頁面
+  if (html.includes('<title>Error</title>') || (html.length < 2000 && html.includes('Error'))) {
+    throw new Error(`Got error page for ${url} (status 403)`);
+  }
+  
   // 檢查是否是 JavaScript 重定向頁面
   if (html.includes('Redirecting...') || (html.length < 5000 && html.includes('window.location'))) {
     // 嘗試從 HTML 中提取重定向 URL
