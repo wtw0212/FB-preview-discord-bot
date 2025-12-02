@@ -1,0 +1,35 @@
+{
+  "name": "discord-facebook-preview-bot",
+  "version": "1.0.0",
+  "description": "Discord bot that posts beautiful embeds for Facebook links.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "facebook",
+    "embed",
+    "preview"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wtw0212/FB-preview-discord-bot.git"
+  },
+  "bugs": {
+    "url": "https://github.com/wtw0212/FB-preview-discord-bot/issues"
+  },
+  "homepage": "https://github.com/wtw0212/FB-preview-discord-bot#readme",
+  "dependencies": {
+    "cheerio": "^1.1.2",
+    "discord.js": "^14.25.1",
+    "dotenv": "^17.2.3"
+  }
+}
