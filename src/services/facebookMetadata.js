@@ -3,20 +3,17 @@ const { URL } = require('node:url');
 
 // 使用多種 User-Agent，包含桌面和手機版本
 const USER_AGENTS = [
+  // Facebook/Twitter Crawler - 通常有最高優先級
+  'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
+  'Twitterbot/1.0',
   // Chrome Desktop
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-  // Firefox Desktop
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0',
   // Safari Mac
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15',
-  // Chrome Mobile
-  'Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
   // iPhone Safari
   'Mozilla/5.0 (iPhone; CPU iPhone OS 17_1_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Mobile/15E148 Safari/604.1',
-  // Facebook App User-Agent
-  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_1_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 [FBAN/FBIOS;FBAV/441.0.0.34.110;FBBV/570675778;FBDV/iPhone14,2;FBMD/iPhone;FBSN/iOS;FBSV/17.1.1;FBSS/3;FBID/phone;FBLC/en_US;FBOP/5]',
 ];
-const FALLBACK_USER_AGENT = USER_AGENTS[0];
+const FALLBACK_USER_AGENT = USER_AGENTS[2]; // Chrome Desktop
 const FACEBOOK_REGEX =
   /https?:\/\/(?:[\w-]+\.)*(?:facebook\.com|fb\.watch)\/[\w\d/?=&#%:;@.,_~!+\-]*[\w\d/=?&#%:;@._~+\-]/gi;
 const FACEBOOK_HOSTS = ['facebook.com', 'fb.com', 'fb.watch', 'm.facebook.com', 'www.facebook.com'];
