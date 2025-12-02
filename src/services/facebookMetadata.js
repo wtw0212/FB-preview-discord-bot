@@ -246,6 +246,7 @@ function parseOpenGraph(html, pageUrl) {
   const hasVideoUrl = !!video;
   const isVideoPath = pageUrl.includes('/videos/') || 
     pageUrl.includes('/watch/') || 
+    pageUrl.includes('/watch?') ||    // /watch?v= 格式
     pageUrl.includes('/reel/') || 
     pageUrl.includes('fb.watch') ||
     pageUrl.includes('/share/v/') ||  // /share/v/ 是影片分享連結
