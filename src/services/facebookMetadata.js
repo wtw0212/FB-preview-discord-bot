@@ -90,11 +90,10 @@ async function fetchFacebookMetadata(url, options = {}) {
     console.warn('[FacebookMetadata] oEmbed failed:', oembedError.message);
   }
 
-  // 嘗試多個 User-Agent
-  const userAgents = options.userAgent ? [options.userAgent] : USER_AGENTS;
+  // 嘗試多個 User-Agent（忽略傳入的 userAgent，使用內建列表）
   let lastError;
 
-  for (const userAgent of userAgents) {
+  for (const userAgent of USER_AGENTS) {
     try {
       const result = await attemptFetch(normalizedUrl, userAgent, options.timeout);
       return result;
