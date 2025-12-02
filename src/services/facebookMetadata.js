@@ -1,11 +1,20 @@
 const cheerio = require('cheerio');
 const { URL } = require('node:url');
 
-// 使用更新的 User-Agent，模擬真實瀏覽器
+// 使用多種 User-Agent，包含桌面和手機版本
 const USER_AGENTS = [
+  // Chrome Desktop
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  // Firefox Desktop
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0',
+  // Safari Mac
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15',
+  // Chrome Mobile
+  'Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
+  // iPhone Safari
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_1_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Mobile/15E148 Safari/604.1',
+  // Facebook App User-Agent
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_1_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 [FBAN/FBIOS;FBAV/441.0.0.34.110;FBBV/570675778;FBDV/iPhone14,2;FBMD/iPhone;FBSN/iOS;FBSV/17.1.1;FBSS/3;FBID/phone;FBLC/en_US;FBOP/5]',
 ];
 const FALLBACK_USER_AGENT = USER_AGENTS[0];
 const FACEBOOK_REGEX =
@@ -181,12 +190,15 @@ function convertToMobileUrl(url) {
 }
 
 async function attemptFetch(url, userAgent, timeout) {
+  // 加入隨機延遲，避免被識別為機器人
+  const delay = Math.floor(Math.random() * 1000) + 500;
+  await new Promise(resolve => setTimeout(resolve, delay));
+
   const headers = buildHeaders(userAgent);
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout || DEFAULT_TIMEOUT_MS);
 
   console.log(`[Debug] Fetching: ${url}`);
-  console.log(`[Debug] User-Agent: ${userAgent.substring(0, 50)}...`);
 
   let response;
   try {
@@ -204,17 +216,23 @@ async function attemptFetch(url, userAgent, timeout) {
     clearTimeout(timeoutId);
   }
 
-  console.log(`[Debug] Response status: ${response.status}`);
-  console.log(`[Debug] Final URL: ${response.url}`);
-  console.log(`[Debug] Redirected: ${response.redirected}`);
+  console.log(`[Debug] Response status: ${response.status}, Final URL: ${response.url.substring(0, 60)}...`);
+
+  // 如果被重定向到登入頁面，拋出錯誤讓它嘗試下一個 User-Agent
+  if (response.url.includes('/login/') || response.url.includes('login.php')) {
+    throw new Error(`Redirected to login page for ${url} (status 403)`);
+  }
 
   if (!response.ok) {
     throw new Error(`Failed to fetch Facebook URL ${url} (status ${response.status})`);
   }
 
   const html = await response.text();
-  console.log(`[Debug] HTML length: ${html.length}`);
-  console.log(`[Debug] Contains "Log into Facebook": ${html.includes('Log into Facebook')}`);
+  
+  // 雙重檢查是否是登入頁面
+  if (html.includes('Log into Facebook') && !html.includes('og:description')) {
+    throw new Error(`Got login page for ${url} (status 403)`);
+  }
   
   return {
     url,
