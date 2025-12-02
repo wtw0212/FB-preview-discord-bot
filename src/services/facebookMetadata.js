@@ -185,6 +185,9 @@ async function attemptFetch(url, userAgent, timeout) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout || DEFAULT_TIMEOUT_MS);
 
+  console.log(`[Debug] Fetching: ${url}`);
+  console.log(`[Debug] User-Agent: ${userAgent.substring(0, 50)}...`);
+
   let response;
   try {
     response = await fetch(url, {
@@ -201,11 +204,18 @@ async function attemptFetch(url, userAgent, timeout) {
     clearTimeout(timeoutId);
   }
 
+  console.log(`[Debug] Response status: ${response.status}`);
+  console.log(`[Debug] Final URL: ${response.url}`);
+  console.log(`[Debug] Redirected: ${response.redirected}`);
+
   if (!response.ok) {
     throw new Error(`Failed to fetch Facebook URL ${url} (status ${response.status})`);
   }
 
   const html = await response.text();
+  console.log(`[Debug] HTML length: ${html.length}`);
+  console.log(`[Debug] Contains "Log into Facebook": ${html.includes('Log into Facebook')}`);
+  
   return {
     url,
     ...parseOpenGraph(html, url),
