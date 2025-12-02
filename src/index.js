@@ -73,6 +73,12 @@ async function handleMessage(message) {
         continue;
       }
 
+      // Debug log
+      console.log(`[FacebookEmbed] Fetched metadata for ${url}:`);
+      console.log(`  Title: ${metadata.title}`);
+      console.log(`  Description: ${metadata.description?.substring(0, 50)}...`);
+      console.log(`  Image: ${metadata.image ? 'YES' : 'NO'}`);
+
       const embed = buildFacebookEmbed(metadata);
       
       // 發送嵌入訊息
